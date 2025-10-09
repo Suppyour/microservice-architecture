@@ -26,4 +26,16 @@
 
 ![Архитектура микросервисов](https://github.com/Suppyour/microservice-architecture/blob/main/diagramm.png?raw=true)
 
+### REST
+
+| Метод    | Endpoint                              | Описание                                                         | Тело запроса   | Ответ                 |
+| -------- | ------------------------------------- | ---------------------------------------------------------------- | -------------- | --------------------- |
+| `GET`    | `/api/events`                         | Получить список всех событий                                     | —              | `List<EventResponse>` |
+| `GET`    | `/api/events/{id}`                    | Получить событие по ID                                           | —              | `EventResponse`       |
+| `POST`   | `/api/events`                         | Создать новое событие                                            | `EventRequest` | `EventResponse`       |
+| `PUT`    | `/api/events/{id}`                    | Обновить событие                                                 | `EventRequest` | `EventResponse`       |
+| `DELETE` | `/api/events/{id}`                    | Удалить событие                                                  | —              | `204 No Content`      |
+| `POST`   | `/api/categories/{categoryId}/events` | Добавить событие в категорию (операция с несколькими сущностями) | `EventRequest` | `EventResponse`       |
+
+
 
