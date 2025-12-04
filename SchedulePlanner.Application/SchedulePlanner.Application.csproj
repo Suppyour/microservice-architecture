@@ -18,4 +18,8 @@
     <ProjectReference Include="..\SchedulePlanner.Domain\SchedulePlanner.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Interfaces\" />
+  </ItemGroup>
+
 </Project>

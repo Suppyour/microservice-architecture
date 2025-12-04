@@ -18,4 +18,9 @@
     <ProjectReference Include="..\SchedulePlanner.Application\SchedulePlanner.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Data\" />
+    <Folder Include="Repositories\" />
+  </ItemGroup>
+
 </Project>
