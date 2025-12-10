@@ -1,10 +1,11 @@
 using SchedulePlanner.Application.DTO;
+using SchedulePlanner.Application.Interfaces;
 using SchedulePlanner.Domain.Entities;
 using SchedulePlanner.Domain.Interfaces;
 
 namespace SchedulePlanner.Application.Services;
 
-public class TaskService
+public class TaskService : ITaskService
     {
         private readonly ITaskRepository _taskRepo;
         private readonly IUserRepository _userRepo;

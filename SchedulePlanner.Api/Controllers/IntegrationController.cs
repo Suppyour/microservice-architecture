@@ -27,4 +27,18 @@ namespace SchedulePlanner.Api.Controllers;
                 ExternalData = data 
             });
         }
+        
+        [HttpGet("rpc-test")]
+        public async Task<IActionResult> TestRpc([FromQuery] string message = "ping")
+        {
+            var response = await _integrationService.TestRpcAsync(message);
+            var traceId = HttpContext.Items["X-Trace-Id"];
+
+            return Ok(new
+            {
+                Message = "RPC call successful.",
+                TraceId = traceId,
+                RpcResponse = response
+            });
+        }
     }

@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Http;
 using SchedulePlanner.Application;
 
 namespace SchedulePlanner.Infrastructure;
@@ -19,7 +21,7 @@ public class HttpService : IHttpService
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         var context = _httpContextAccessor.HttpContext;
 
-        if (context != null && context.Items.TryGetValue(TraceIdHeaderName, out var traceId))
+        if (context != null && context.Items.TryGetValue(TraceIdHeaderName, out var traceId) && traceId != null)
         {
             if (!request.Headers.Contains(TraceIdHeaderName))
             {

@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace SchedulePlanner.Infrastructure;
 
 public class TraceIdMiddleware
