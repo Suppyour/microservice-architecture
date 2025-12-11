@@ -1,13 +1,13 @@
-using Microsoft.AspNetCore.Builder;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SchedulePlanner.Application;
 using SchedulePlanner.Application.Services;
 using SchedulePlanner.Application.Interfaces;
 using SchedulePlanner.Domain.Interfaces;
 using SchedulePlanner.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using SchedulePlanner.Api;
+using SchedulePlanner.Application.Sagas;
+using SchedulePlanner.Application.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +30,28 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<CategoryService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<ExternalIntegrationService>();
+
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumer<ValidateUserConsumer>();
+    x.AddConsumer<ReserveTimeSlotConsumer>();
+    x.AddConsumer<CreateTaskConsumer>();
+    x.AddConsumer<SendNotificationConsumer>();
+
+    x.AddSagaStateMachine<EventCreationSaga, EventCreationState>()
+        .InMemoryRepository();
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host("localhost", "/", h =>
+        {
+            h.Username("guest");
+            h.Password("guest");
+        });
+
+        cfg.ConfigureEndpoints(context);
+    });
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

@@ -10,43 +10,62 @@ namespace SchedulePlanner.Api;
 public class RpcServer : BackgroundService
 {
     private readonly ILogger<RpcServer> _logger;
-    private readonly IConnection _connection;
-    private readonly IModel _channel;
+    private readonly IConfiguration _configuration;
+    private IConnection? _connection;
+    private IChannel? _channel;
     private const string RpcQueueName = "rpc_queue";
 
     public RpcServer(IConfiguration configuration, ILogger<RpcServer> logger)
     {
+        _configuration = configuration;
         _logger = logger;
-        var factory = new ConnectionFactory() { HostName = configuration["RabbitMQ:HostName"] ?? "localhost" };
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
-        _channel.QueueDeclare(queue: RpcQueueName, durable: false, exclusive: false, autoDelete: false, arguments: null);
-        _channel.BasicQos(0, 1, false);
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    // Инициализация соединения перенесена в ExecuteAsync, так как она теперь асинхронная
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        stoppingToken.ThrowIfCancellationRequested();
+        var factory = new ConnectionFactory
+        {
+            HostName = _configuration["RabbitMQ:HostName"] ?? "localhost"
+        };
 
-        var consumer = new EventingBasicConsumer(_channel);
-        _channel.BasicConsume(queue: RpcQueueName, autoAck: false, consumer: consumer);
+        // 1. Создаем соединение и канал асинхронно
+        _connection = await factory.CreateConnectionAsync(stoppingToken);
+        _channel = await _connection.CreateChannelAsync();
+
+        // 2. Объявляем очередь (QueueDeclareAsync)
+        await _channel.QueueDeclareAsync(queue: RpcQueueName, durable: false, exclusive: false, autoDelete: false, arguments: null);
         
+        // 3. QoS (BasicQosAsync)
+        await _channel.BasicQosAsync(0, 1, false);
+
         _logger.LogInformation("Awaiting RPC requests on queue '{Queue}'", RpcQueueName);
 
-        consumer.Received += (model, ea) =>
+        // 4. Используем AsyncEventingBasicConsumer вместо EventingBasicConsumer
+        var consumer = new AsyncEventingBasicConsumer(_channel);
+        
+        consumer.ReceivedAsync += async (model, ea) =>
         {
-            string response = null;
+            string response = string.Empty;
             var body = ea.Body.ToArray();
+            
+            // Получаем свойства входящего сообщения
             var props = ea.BasicProperties;
-            var replyProps = _channel.CreateBasicProperties();
-            replyProps.CorrelationId = props.CorrelationId;
+            var replyTo = props.ReplyTo;
+            var correlationId = props.CorrelationId;
+
+            // Создаем свойства для ответа
+            var replyProps = new BasicProperties
+            {
+                CorrelationId = correlationId
+            };
 
             try
             {
                 var message = Encoding.UTF8.GetString(body);
                 _logger.LogInformation("Received RPC request: '{Message}'", message);
-                // For demonstration, we just return a simple message.
-                // In a real application, you would do some work here.
+
+                // Логика обработки
                 response = $"Responding to '{message}' at {DateTime.UtcNow:O}";
             }
             catch (Exception e)
@@ -56,19 +75,29 @@ public class RpcServer : BackgroundService
             }
             finally
             {
-                var responseBytes = Encoding.UTF8.GetBytes(response);
-                _channel.BasicPublish(exchange: "", routingKey: props.ReplyTo, basicProperties: replyProps, body: responseBytes);
-                _channel.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
+                if (!string.IsNullOrEmpty(replyTo))
+                {
+                    var responseBytes = Encoding.UTF8.GetBytes(response);
+                    
+                    // 5. Публикуем ответ асинхронно (BasicPublishAsync)
+                    await _channel.BasicPublishAsync(exchange: "", routingKey: replyTo, mandatory: false, basicProperties: replyProps, body: responseBytes);
+                    
+                    // 6. Подтверждаем обработку (BasicAckAsync)
+                    await _channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+                }
             }
         };
 
-        return Task.CompletedTask;
+        // 7. Подписываемся на очередь
+        await _channel.BasicConsumeAsync(queue: RpcQueueName, autoAck: false, consumer: consumer);
+
+        // Ждем остановки приложения
+        await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
     public override void Dispose()
     {
-        _channel.Close();
-        _connection.Close();
+
         base.Dispose();
     }
 }

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -8,59 +7,133 @@ using SchedulePlanner.Domain.Interfaces;
 
 namespace SchedulePlanner.Infrastructure;
 
-public class RpcClient : IRpcClient
+public class RpcClient : IRpcClient, IDisposable
 {
-    private readonly IConnection _connection;
-    private readonly IModel _channel;
-    private readonly string _replyQueueName;
+    private readonly IConfiguration _configuration;
+    private IConnection? _connection;
+    private IChannel? _channel;
+    private string? _replyQueueName;
+
     private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _callbackMapper = new();
+    
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private bool _isInitialized = false;
+
     private const string RpcQueueName = "rpc_queue";
 
     public RpcClient(IConfiguration configuration)
     {
-        var factory = new ConnectionFactory() { HostName = configuration["RabbitMQ:HostName"] ?? "localhost" };
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
-        _replyQueueName = _channel.QueueDeclare().QueueName;
-        var consumer = new EventingBasicConsumer(_channel);
-        consumer.Received += (model, ea) =>
+        _configuration = configuration;
+    }
+    
+    private async Task InitializeAsync()
+    {
+        if (_isInitialized) return;
+        
+        await _initLock.WaitAsync();
+        try
         {
-            if (!_callbackMapper.TryRemove(ea.BasicProperties.CorrelationId, out var tcs))
-                return;
-            var body = ea.Body.ToArray();
-            var response = Encoding.UTF8.GetString(body);
-            tcs.TrySetResult(response);
-        };
+            if (_isInitialized) return;
 
-        _channel.BasicConsume(
-            consumer: consumer,
-            queue: _replyQueueName,
-            autoAck: true);
+            var factory = new ConnectionFactory
+            {
+                HostName = _configuration["RabbitMQ:HostName"] ?? "localhost"
+            };
+
+            _connection = await factory.CreateConnectionAsync();
+            _channel = await _connection.CreateChannelAsync();
+
+            var queueDeclareResult = await _channel.QueueDeclareAsync(); 
+            _replyQueueName = queueDeclareResult.QueueName;
+
+            var consumer = new AsyncEventingBasicConsumer(_channel);
+            
+            consumer.ReceivedAsync += (model, ea) =>
+            {
+                var correlationId = ea.BasicProperties.CorrelationId;
+                
+                if (!_callbackMapper.TryRemove(correlationId!, out var tcs))
+                {
+                    return Task.CompletedTask;
+                }
+
+                var body = ea.Body.ToArray();
+                var response = Encoding.UTF8.GetString(body);
+                
+                tcs.TrySetResult(response);
+                
+                return Task.CompletedTask;
+            };
+            
+            await _channel.BasicConsumeAsync(
+                queue: _replyQueueName,
+                autoAck: true,
+                consumer: consumer);
+
+            _isInitialized = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
-    public Task<string> CallAsync(string message, CancellationToken cancellationToken = default)
+    public async Task<string> CallAsync(string message, CancellationToken cancellationToken = default)
     {
-        var props = _channel.CreateBasicProperties();
+        await InitializeAsync();
+
         var correlationId = Guid.NewGuid().ToString();
-        props.CorrelationId = correlationId;
-        props.ReplyTo = _replyQueueName;
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        
+        _callbackMapper.TryAdd(correlationId, tcs);
+        
+        var props = new BasicProperties
+        {
+            CorrelationId = correlationId,
+            ReplyTo = _replyQueueName
+        };
+
         var messageBytes = Encoding.UTF8.GetBytes(message);
 
-        var tcs = new TaskCompletionSource<string>();
-        _callbackMapper.TryAdd(correlationId, tcs);
-
-        _channel.BasicPublish(
-            exchange: "",
-            routingKey: RpcQueueName,
-            basicProperties: props,
-            body: messageBytes);
+        try
+        {
+            await _channel!.BasicPublishAsync(
+                exchange: "",
+                routingKey: RpcQueueName,
+                mandatory: false,
+                basicProperties: props,
+                body: messageBytes,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception)
+        {
+            _callbackMapper.TryRemove(correlationId, out _);
+            throw;
+        }
         
-        cancellationToken.Register(() => _callbackMapper.TryRemove(correlationId, out _));
-        return tcs.Task;
+        using var registration = cancellationToken.Register(() =>
+        {
+            if (_callbackMapper.TryRemove(correlationId, out var removedTcs))
+            {
+                removedTcs.TrySetCanceled();
+            }
+        });
+
+        return await tcs.Task;
     }
 
     public void Dispose()
     {
-        _connection.Close();
+        try 
+        {
+            _channel?.CloseAsync().GetAwaiter().GetResult();
+            _connection?.CloseAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // ignored
+        }
+
+        _initLock.Dispose();
     }
 }
