@@ -21,7 +21,7 @@
 
 Процесс оркестрируется компонентом `EventCreationSaga` и гарантирует целостность данных через следующую последовательность шагов:
 
-![Схема архитектуры]()https://github.com/Suppyour/microservice-architecture/blob/main/SchedulePlanner.png?raw=true
+![Схема архитектуры](https://github.com/Suppyour/microservice-architecture/blob/main/SchedulePlanner.png?raw=true)
 *(Схема взаимодействия компонентов в рамках EventCreationSaga)*
 
 1.  **Инициализация:** Клиент отправляет запрос через REST API. Система инициализирует экземпляр Саги.
@@ -64,19 +64,3 @@
 | `POST` | `/api/Tasks/saga` | **Асинхронное** создание (Сага) | `CreateTaskDto` | `202 Accepted` |
 | `GET` | `/api/Tasks/user/{userId}` | Получить задачи пользователя | `userId` (Guid) | `List<ScheduleTask>` |
 | `GET` | `/api/Integration/rpc-test` | Тест RPC вызова | `?message=...` | JSON с ответом |
-
-### Architecture Diagram
-
-![Архитектура микросервисов](https://github.com/Suppyour/microservice-architecture/blob/main/diagramm.png?raw=true)
-
-```mermaid
-graph TD
-    User[Client / Swagger] -->|REST HTTP| API[SchedulePlanner API]
-    
-    subgraph "SchedulePlanner Service"
-        API -->|Starts| Saga[EventCreation Saga]
-        Saga -->|Pub| RMQ((RabbitMQ))
-        RMQ -->|Sub| C1[Consumers]
-        C1 -->|Event| Saga
-    end
-```
