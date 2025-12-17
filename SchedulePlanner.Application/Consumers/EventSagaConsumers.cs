@@ -31,7 +31,7 @@ public class ValidateUserConsumer : IConsumer<IValidateUser>
 }
 
 public class ReserveTimeSlotConsumer : IConsumer<IReserveTimeSlot>
-{
+{1
     
     public async Task Consume(ConsumeContext<IReserveTimeSlot> context)
     {
@@ -59,13 +59,14 @@ public class CreateTaskConsumer : IConsumer<ICreateTask>
     {
         try
         {
-            var dto = new Dto.CreateTaskDto(
+            var dto = new CreateTaskDto(
                 context.Message.Title,
                 context.Message.Description,
                 context.Message.DueDate,
                 context.Message.UserId,
                 context.Message.CategoryId
             );
+
             var createdTask = await _taskService.CreateTaskAsync(dto);
             
             await context.Publish<ITaskCreated>(new { context.Message.EventId, TaskId = createdTask.Id });

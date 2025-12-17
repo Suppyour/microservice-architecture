@@ -58,7 +58,7 @@ public class EventCreationSaga : MassTransitStateMachine<EventCreationState>
                 .Publish(context => new ReserveTimeSlotMessage(context.Saga.CorrelationId, context.Saga.StartTime, context.Saga.EndTime)),
             When(UserValidationFailed)
                 .TransitionTo(Failed)
-                .Finalize() // Or handle compensation
+                .Finalize()
         );
 
         During(ReservingTimeSlot,
@@ -111,8 +111,6 @@ public class EventCreationSaga : MassTransitStateMachine<EventCreationState>
     public Event<INotificationSent> NotificationSent { get; private set; }
 }
 
-// Concrete classes for internal message publishing to match interfaces
-// Since MassTransit can use anonymous types, we can also use concrete implementations for explicit control
 public record ValidateUserMessage(Guid EventId, Guid UserId) : IValidateUser;
 public record ReserveTimeSlotMessage(Guid EventId, DateTime StartTime, DateTime EndTime) : IReserveTimeSlot;
 public record CreateTaskMessage(Guid EventId, Guid UserId, string Title, string Description, DateTime DueDate, Guid CategoryId) : ICreateTask;

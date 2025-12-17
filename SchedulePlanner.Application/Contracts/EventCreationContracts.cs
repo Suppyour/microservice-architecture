@@ -2,7 +2,6 @@ using System;
 
 namespace SchedulePlanner.Application.Contracts;
 
-// --- Entry Point ---
 public interface ISubmitEventCreation
 {
     Guid EventId { get; }
@@ -13,7 +12,6 @@ public interface ISubmitEventCreation
     Guid CategoryId { get; }
 }
 
-// --- Step 1: User Validation ---
 public interface IValidateUser
 {
     Guid EventId { get; }
@@ -33,11 +31,10 @@ public interface IUserValidationFailed
     string Reason { get; }
 }
 
-// --- Step 2: Time Slot Reservation ---
 public interface IReserveTimeSlot
 {
     Guid EventId { get; }
-    DateTime StartTime { get; } // Assumed logic uses DueDate as start or similar
+    DateTime StartTime { get; }
     DateTime EndTime { get; }
 }
 
@@ -52,7 +49,6 @@ public interface ITimeSlotReservationFailed
     string Reason { get; }
 }
 
-// --- Step 3: Create Task (Persistence) ---
 public interface ICreateTask
 {
     Guid EventId { get; }
@@ -66,7 +62,7 @@ public interface ICreateTask
 public interface ITaskCreated
 {
     Guid EventId { get; }
-    Guid TaskId { get; } // ID of the created task entity
+    Guid TaskId { get; }
 }
 
 public interface ITaskCreationFailed
@@ -75,7 +71,6 @@ public interface ITaskCreationFailed
     string Reason { get; }
 }
 
-// --- Step 4: Notification ---
 public interface ISendNotification
 {
     Guid EventId { get; }
